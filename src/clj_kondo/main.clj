@@ -221,3 +221,17 @@ Options:
                                    "--config" "{:linters {:invalid-arity {:level :warning}}}")))))
 
   )
+
+(defn issue []
+  (let [a (atom 99)
+        nested {:atom (atom nil)}]
+    (println :a a)
+    (println :nested nested)
+    (reset! a 8)
+    (reset! (:atom nested) 5)
+    nested))
+
+(comment
+  (issue)
+  ;;
+  )

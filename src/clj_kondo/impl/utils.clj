@@ -336,7 +336,9 @@
                         (get-in idacs [:cljc :defs fn-ns :cljs fn-name])
                         ;; could be a macro
                         (get-in idacs [:clj :defs fn-ns fn-name])
-                        (get-in idacs [:cljc :defs fn-ns :clj fn-name])))))
+                        (get-in idacs [:cljc :defs fn-ns :clj fn-name]))
+      [:lpy :lpy] (or (get-in idacs [:lpy :defs fn-ns fn-name])
+                      (get-in idacs [:cljc :defs fn-ns :lpy fn-name])))))
 
 (defn stderr [& msgs]
   (binding [*out* *err*]
@@ -359,7 +361,8 @@
                                   [(case call-lang #_base-lang
                                          :clj 'clojure.core
                                          :cljs 'cljs.core
-                                         :cljc 'clojure.core)])))))]
+                                         :cljc 'clojure.core
+                                         :lpy 'basilisp.core)])))))]
      (if-let [imported-ns (:imported-ns called-fn)]
        (or
         (let [imported-var (:imported-var called-fn)

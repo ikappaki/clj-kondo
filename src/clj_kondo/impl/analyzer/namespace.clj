@@ -429,7 +429,8 @@
      :used-namespaces
      (-> (case lang
            :clj '#{clojure.core}
-           :cljs '#{cljs.core})
+           :cljs '#{cljs.core}
+           :lpy '#{basilisp.core})
          (into (keys refer-alls))
          (conj ns-name)
          (into (when-not

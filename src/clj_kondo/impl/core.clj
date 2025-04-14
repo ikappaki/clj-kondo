@@ -16,7 +16,8 @@
 
 (set! *warn-on-reflection* true)
 
-(def dev? (= "true" (System/getenv "CLJ_KONDO_DEV")))
+(def dev? true ;; (= "true" (System/getenv "CLJ_KONDO_DEV"))
+  )
 
 (def cache-version "v1")
 

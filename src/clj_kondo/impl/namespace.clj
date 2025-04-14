@@ -810,7 +810,8 @@
                         (contains? var-info/special-forms name-sym)))
                 {:ns (case lang
                        :clj 'clojure.core
-                       :cljs 'cljs.core)
+                       :cljs 'cljs.core
+                       :lpy 'basilisp.core)
                  :name name-sym
                  :resolved-core? true}
                 (let [referred-all-ns (some (fn [[k {:keys [:excluded]}]]

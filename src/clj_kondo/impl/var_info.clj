@@ -10,7 +10,8 @@
 (defn core-sym? [lang sym]
   (case lang
     :clj (contains? clojure-core-syms sym)
-    :cljs (contains? cljs-core-syms sym)))
+    :cljs (contains? cljs-core-syms sym)
+    :lpy (contains? clojure-core-syms sym)))
 
 ;;;; Scratch
 

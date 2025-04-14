@@ -58,10 +58,13 @@
                          (let [fst (first callstack)]
                            (one-of fst [[clojure.core comment]
                                         [cljs.core comment]
+                                        [basilisp.core comment]
                                         [clojure.core do]
                                         [cljs.core do]
+                                        [basilisp.core do]
                                         [clojure.core let]
-                                        [cljs.core let]])))]
+                                        [cljs.core let]
+                                        [basilisp.core let]])))]
      (when-not (and (:in-comment ctx)
                     (:skip-comments config))
        (let [len (count children)
@@ -364,7 +367,10 @@
                                       (assoc 'clojure.core 'clojure.core)
                                       (identical? :cljs lang)
                                       (assoc 'cljs.core 'cljs.core
-                                             'clojure.core 'cljs.core)))))]
+                                             'clojure.core 'cljs.core)
+                                      (identical? :lpy lang)
+                                      (assoc 'basilisp.core 'basilisp.core
+                                             'clojure.core 'basilisp.core)))))]
     (namespace/reg-namespace! ctx ns)
     (analyze-children ctx (next children))
     ns))
@@ -502,8 +508,10 @@
                      (one-of (first (:callstack ctx))
                              [[clojure.core defn]
                               [cljs.core defn]
+                              [basilisp.core defn]
                               [clojure.core defn-]
-                              [cljs.core defn-]]))
+                              [cljs.core defn-]
+                              [basilisp.core defn-]]))
                 (findings/reg-finding! ctx
                                        (node->line (:filename ctx)
                                                    first-child
@@ -644,7 +652,8 @@
             (when config (swap! (:inline-configs ctx) conj config)))
         macro? (when (or (one-of defined-by->lint-as
                                  [clojure.core/defmacro
-                                  cljs.core/defmacro])
+                                  cljs.core/defmacro
+                                  basilisp.core/defmacro])
                          (:macro var-meta))
                  true)
         deprecated (:deprecated var-meta)
@@ -703,8 +712,10 @@
                    :type (when (one-of defined-by->lint-as
                                        [clojure.core/defn
                                         cljs.core/defn
+                                        basilisp.core/defn
                                         clojure.core/defn-
-                                        cljs.core/defn-])
+                                        cljs.core/defn-
+                                        basilisp.core/defn-])
                            :fn))))
     (docstring/lint-docstring! ctx doc-node docstring)
     (mapcat :parsed parsed-bodies)))
@@ -867,10 +878,12 @@
         [current-call parent-call] callstack
         parent-let (one-of parent-call
                            [[clojure.core let]
-                            [cljs.core let]])
+                            [cljs.core let]
+                            [basilisp.core let]])
         current-let (one-of current-call
                             [[clojure.core let]
-                             [cljs.core let]])
+                             [cljs.core let]
+                             [basilisp.core let]])
         bv-node (-> expr :children second)
         valid-bv-node (assert-vector ctx call bv-node)]
     (when (and current-let
@@ -907,7 +920,7 @@
 
 (defn analyze-do [{:keys [:filename :callstack] :as ctx} expr]
   (let [parent-call (second callstack)
-        core? (one-of (first parent-call) [clojure.core cljs.core])
+        core? (one-of (first parent-call) [clojure.core cljs.core basilisp.core])
         core-sym (when core?
                    (second parent-call))
         ;; avoid warnings from hook code
@@ -986,10 +999,10 @@
       (seq arglist-strs) (assoc :arglist-strs arglist-strs))))
 
 (defn- def? [x]
-  (one-of x [[clojure.core def] [cljs.core def]]))
+  (one-of x [[clojure.core def] [cljs.core def] [basilisp.core def]]))
 
 (defn- let? [x]
-  (one-of x [[clojure.core let] [cljs.core let]]))
+  (one-of x [[clojure.core let] [cljs.core let] [basilisp.core let]]))
 
 (defn- def-fn? [{:keys [callstack]}]
   (let [[_ parent extra-parent] callstack]
@@ -1222,11 +1235,12 @@
         docstring (when (> (count children) 1)
                     (string-from-token (first children)))
         defmulti? (or (= 'clojure.core/defmulti defined-by->lint-as)
-                      (= 'cljs.core/defmulti defined-by->lint-as))
+                      (= 'cljs.core/defmulti defined-by->lint-as)
+                      (= 'basilisp.core/defmulti defined-by->lint-as))
         doc-node (when docstring
                    (first children))
         [child & children] (if docstring (next children) children)
-        core-def? (one-of (first (:callstack ctx)) [[clojure.core def] [cljs.core def]])
+        core-def? (one-of (first (:callstack ctx)) [[clojure.core def] [cljs.core def] [basilisp.core def]])
         _ (when (and core-def? children)
             (findings/reg-finding! ctx (utils/node->line (:filename ctx) expr :invalid-arity "Too many arguments to def")))
         _ (when-not child
@@ -1337,8 +1351,11 @@
            (one-of (first callstack) [[clojure.core fn]
                                       [clojure.core fn*]
                                       [cljs.core fn]
-                                      [cljs.core fn*]])
+                                      [cljs.core fn*]
+                                      [basilisp.core fn]
+                                      [basilisp.core fn*]])
            (not= '[cljs.core .] (second callstack))
+           (not= '[basilisp.core .] (second callstack))
            (= (map #(str/replace % #"^%$" "%1") children)
               (map str fn-args)))
       (:fn-parent-loc ctx))))
@@ -1712,7 +1729,7 @@
 (defn analyze-empty?
   [ctx expr]
   (let [cs (:callstack ctx)
-        not-expr (one-of (second cs) [[clojure.core not] [cljs.core not]])]
+        not-expr (one-of (second cs) [[clojure.core not] [cljs.core not] [basilisp.core not]])]
     (when not-expr
       (findings/reg-finding!
        ctx
@@ -1930,7 +1947,8 @@
 (defn analyze-hof [ctx expr resolved-as-name hof-ns-name hof-resolved-name]
   (let [children (next (:children expr))
         core-ns? (or (= 'clojure.core hof-ns-name)
-                     (= 'cljs.core hof-ns-name))
+                     (= 'cljs.core hof-ns-name)
+                     (= 'basilisp.core hof-ns-name))
         [prepending-n f-pos f-args-n] (cond (and core-ns?
                                                  (or (= 'update hof-resolved-name)
                                                      (= 'update-in hof-resolved-name)
@@ -2043,8 +2061,8 @@
                    (= 'clojure.cljs hof-ns-name))
                (= 2 (count children))
                (not (one-of [resolved-namespace resolved-name]
-                            [[clojure.core +] [cljs.core +]
-                             [clojure.core *] [cljs.core *]]))
+                            [[clojure.core +] [cljs.core +] [basilisp.core +]
+                             [clojure.core *] [cljs.core *] [basilisp.core *]]))
                (not (config/reduce-without-init-excluded? (:config ctx)
                                                           (symbol (str resolved-namespace)
                                                                   (str resolved-name)))))
@@ -2162,13 +2180,13 @@
                                 (utils/constant? rhs)
                                 (not (utils/constant? lhs))
                                 (or (not only-in-test-assertion)
-                                    (one-of (second (:callstack ctx)) [[cljs.test is] [clojure.test is]]))
+                                    (one-of (second (:callstack ctx)) [[cljs.test is] [basilisp.test is] [clojure.test is]]))
                                 rhs)
                            (and (identical? :last pos)
                                 (utils/constant? lhs)
                                 (not (utils/constant? rhs))
                                 (or (not only-in-test-assertion)
-                                    (one-of (second (:callstack ctx)) [[cljs.test is] [clojure.test is]]))
+                                    (one-of (second (:callstack ctx)) [[cljs.test is] [basilisp.test is] [clojure.test is]]))
                                 lhs)))]
           (findings/reg-finding! ctx (assoc (meta expr)
                                             :type :equals-expected-position
@@ -2282,7 +2300,7 @@
                         (or
                          (hooks/hook-fn ctx config resolved-namespace resolved-name)
                          (case [resolved-namespace resolved-name]
-                           ([clojure.test testing] [cljs.test testing])
+                           ([clojure.test testing] [cljs.test testing] [basilisp.test testing])
                            (when (:analysis-context ctx)
                                 ;; only use testing hook when analysis is requested
                              test/testing-hook)
@@ -2395,7 +2413,7 @@
                                                     (assoc :clj-kondo.impl/generated true))) cs))))
                               (update ctx :callstack conj [nil nil]))
                         resolved-as-clojure-var-name
-                        (when (one-of resolved-as-namespace [clojure.core cljs.core])
+                        (when (one-of resolved-as-namespace [clojure.core cljs.core basilisp.core])
                           resolved-as-name)
                         ctx (if resolved-as-clojure-var-name
                               (assoc ctx
@@ -2527,15 +2545,16 @@
                             (analyze-schema ctx 'defrecord expr 'schema.core/defrecord defined-by->lint-as)
                             ([clojure.test deftest]
                              [clojure.test deftest-]
-                             [cljs.test deftest])
+                             [cljs.test deftest]
+                             [basilisp.test deftest])
                             (test/analyze-deftest ctx expr defined-by defined-by->lint-as)
-                            ([clojure.core.match match] [cljs.core.match match])
+                            ([clojure.core.match match] [cljs.core.match match] [basilisp.core.match match])
                             (match/analyze-match ctx expr)
                             [clojure.string replace]
                             (analyze-clojure-string-replace ctx expr)
-                            [cljs.test async]
+                            ([cljs.test async])
                             (test/analyze-cljs-test-async ctx expr)
-                            ([clojure.test are] [cljs.test are])
+                            ([clojure.test are] [cljs.test are] [basilisp.test are])
                             (test/analyze-are ctx resolved-namespace expr)
                             ([clojure.test.check.properties for-all])
                             (analyze-like-let ctx expr)
@@ -2543,23 +2562,26 @@
                             (spec/analyze-def ctx expr 'cljs.spec.alpha/def)
                             [clojure.spec.alpha def]
                             (spec/analyze-def ctx expr 'clojure.spec.alpha/def)
-                            ([clojure.spec.alpha fdef] [cljs.spec.alpha fdef])
+                            ([clojure.spec.alpha fdef] [cljs.spec.alpha fdef] [basilisp.spec.alpha fdef])
                             (spec/analyze-fdef (assoc ctx
                                                       :analyze-children
                                                       analyze-children) expr)
-                            ([clojure.spec.alpha keys] [cljs.spec.alpha keys])
+                            ([clojure.spec.alpha keys] [cljs.spec.alpha keys] [basilisp.spec.alpha keys])
                             (spec/analyze-keys ctx expr)
                             ([clojure.spec.gen.alpha lazy-combinators]
                              [clojure.spec.gen.alpha lazy-prims]
                              [cljs.spec.gen.alpha lazy-combinators]
-                             [cljs.spec.gen.alpha lazy-prims])
+                             [cljs.spec.gen.alpha lazy-prims]
+                             [basilisp.spec.gen.alpha lazy-combinators]
+                             [basilisp.spec.gen.alpha lazy-prims])
                             (analyze-declare ctx expr defined-by defined-by->lint-as)
                             [potemkin import-vars]
                             (potemkin/analyze-import-vars ctx expr utils/ctx-with-linters-disabled
                                                           'potemkin/import-vars
                                                           defined-by->lint-as)
                             ([clojure.core.async alt!] [clojure.core.async alt!!]
-                                                       [cljs.core.async alt!] [cljs.core.async alt!!])
+                                                       [cljs.core.async alt!] [cljs.core.async alt!!]
+                             [basilisp.core.async alt!] [basilsp.core.async alt!!])
                             (core-async/analyze-alt!
                              (assoc ctx
                                     :analyze-expression** analyze-expression**
@@ -2884,7 +2906,7 @@
     (when (and (symbol? (ffirst callstack))
                idx len (< idx (dec len)))
       (let [parent-call (first (:callstack ctx))
-            core? (one-of (first parent-call) [clojure.core cljs.core])
+            core? (one-of (first parent-call) [clojure.core cljs.core basilisp.core])
             core-sym (when core?
                        (second parent-call))
             generated? (:clj-kondo.impl/generated expr)
@@ -3151,6 +3173,7 @@
                      (seq/list-node [(token/token-node (case lang
                                                          :clj 'clojure.core/deref
                                                          :cljs 'cljs.core/deref
+                                                         :lpy 'basilisp.core/deref
                                                          'clojure.core/deref))
                                      (first (:children expr))])
                      (meta expr)))
@@ -3360,7 +3383,7 @@
             (doseq [lang features]
               (analyze-expressions (assoc ctx :base-lang :cljc :lang lang :filename filename)
                                    (:children (select-lang ctx parsed lang))))
-            (:clj :cljs :edn)
+            (:clj :cljs :edn :lpy)
             (let [ctx (assoc ctx :base-lang lang :lang lang :filename filename
                              :uri uri)]
               (analyze-expressions ctx (:children parsed))
